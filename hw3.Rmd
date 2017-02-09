@@ -1,0 +1,345 @@
+---
+title: "Angela Liang HW 3"
+output:
+  html_document: 
+    toc:  true
+    toc_float:  true
+    code_folding:  hide
+---
+***
+***
+# Problem 1 {.tabset}
+## a
+```{r}
+stock <- read.csv("stock_history.csv")
+stock$MAPE <- stock$Price/stock$Earnings_10MA_back
+summary(stock$MAPE)
+stock <- na.omit(stock)
+```
+
+There are 120 NAs in `MAPE` because `MAPE` is calculated by `Earnings_10MA_back` and there are 120 NAs in `Earnings_10MA_back`.
+
+## b
+```{r}
+md1 <- lm(Return_10_fwd ~ MAPE, data = stock)
+summary(md1)
+```
+
+The Coefficient is -0.0045885 and the standard error is 0.0001727 It is significant because the p value is less than 2e-16 which is very small.
+
+## c
+
+```{r, cache=TRUE}
+cv.lm <- function(data, formulae, nfolds=5) {
+  # Strip data of NA rows
+    # ATTN: Better to check whether NAs are in variables used by the models
+  data <- na.omit(data)
+  # Make sure the formulae have type "formula"
+  formulae <- sapply(formulae, as.formula)
+  # Extract the name of the response variable from each formula
+    # ATTN: CV doesn't make a lot of sense unless these are all the same!
+  responses <- sapply(formulae, response.name)
+  names(responses) <- as.character(formulae)
+  n <- nrow(data)
+  # Assign each data point to a fold, at random
+    # see ?sample for the effect of sample(x) on a vector x
+  fold.labels <- sample(rep(1:nfolds, length.out=n))
+  mses <- matrix(NA, nrow=nfolds, ncol=length(formulae))
+  colnames <- as.character(formulae)
+  # EXERCISE: Replace the double for() loop below by defining a new
+  # function and then calling outer()
+  for (fold in 1:nfolds) {
+    test.rows <- which(fold.labels == fold)
+    train <- data[-test.rows,]
+    test <- data[test.rows,]
+    for (form in 1:length(formulae)) {
+       # Fit the model on the training data
+       current.model <- lm(formula=formulae[[form]], data=train)
+       # Generate predictions on the testing data
+       predictions <- predict(current.model, newdata=test)
+       # Get the responses on the testing data
+       test.responses <- test[,responses[form]]
+       test.errors <- test.responses - predictions
+       mses[fold, form] <- mean(test.errors^2)
+    }
+  }
+  return(colMeans(mses))
+}
+
+# Extract the name of the response variable from a regression formula
+  # Presumes response is the left-most variable
+  # EXERCISE: Write a more robust version using terms()
+  # Inputs: regression formula
+  # Outputs: name of the response variable
+response.name <- function(formula) {
+  var.names <- all.vars(formula)
+  return(var.names[1])
+}
+
+cv.lm(stock, c("Return_10_fwd ~ MAPE"))
+```
+
+The MSE of this model, under five-fold CV is 0.001871124
+
+***
+***
+
+# Problem 2 {.tabset}
+
+## a
+
+```{r}
+md2 <- lm(Return_10_fwd ~ I(1/MAPE), data = stock)
+summary(md2)
+```
+
+The coefficient is 0.995904 and the standard error is 0.036513, it is significant since p value is very small <2e-16.
+
+## b
+
+```{r, cache=TRUE}
+cv.lm(stock, c("Return_10_fwd ~ I(1/MAPE)"))
+```
+
+The MSE for 5-fold CV is 0.001839042, which is slightly smaller comparing to the previous one.
+
+
+***
+***
+
+
+# Problem 3 {.tabset}
+
+## a
+```{r}
+mse <- mean((na.omit(stock$Return_10_fwd - 1/stock$MAPE))^2)
+mse
+```
+
+In sample MSE is 0.001896346
+
+## b
+
+Since MSE consists of variance and bias and in this case we have $returns_i = \frac{1}{MAP} + \epsilon_i$ $MSE = E[(returns_i - \frac{1}{MAPE})^2] = E[\epsilon_i^2]$ . So MSE is an unbiased estimator of the generalization error. 
+
+## c
+```{r, cache=TRUE}
+library(ggplot2)
+resid <- na.omit(stock)$Return_10_fwd - 1/na.omit(stock)$MAPE
+qqnorm(resid)
+qqline(resid)
+```
+
+
+
+
+## d
+```{r, message=FALSE, warning=FALSE}
+library(MASS)
+resid <- na.omit(resid)
+t.est <- fitdistr(resid,"t")
+t.est
+```
+
+
++ m = -0.0079, standard error is 0.0011
++ s = 0.0426 , standard error is 0.0008
++ df = 149.17, standard error is 100.12
+
+```{r, cache=TRUE}
+dt.fitted <- function(x,fitted.t=t.est) {
+  m <- fitted.t$estimate["m"]
+  s <- fitted.t$estimate["s"]
+  df <- fitted.t$estimate["df"]
+  return((1/s)*dt((x-m)/s,df=df)) # why the (1/s) factor out front?
+}
+hist(resid, freq=FALSE, xlab="Residuals", n=15,
+  main="Distribution of Residuals", ylim=c(0,10))
+curve(dt.fitted, add=TRUE,col="blue",lwd=3)
+```
+
+***
+***
+
+# Problem 4
+
+```{r, cache=TRUE}
+library(np)
+options(np.messages=FALSE)
+np <- npreg(Return_10_fwd ~ MAPE, data = stock, tol = 0.001, ftol = 0.0001)
+summary(np)
+np$MSE
+```
+
+bandwidth is 0.5805076 and MSE is 0.001657891.
+
+
+***
+***
+
+# Problem 5
+
+```{r,cache=TRUE,warning=FALSE}
+# a
+plot(x = stock$MAPE, y = stock$Return_10_fwd, xlab = "MAPE", ylab = "Returns", main = "Scatter Plot of Returns and  MAPE")
+
+# b
+lines(predict(md1) ~ MAPE, data = na.omit(stock), col = "blue")
+lines(predict(md2) ~ MAPE, data = na.omit(stock), col = "red")
+
+# c
+curve(1/x, col = "pink", add = TRUE)
+
+# d
+lines(predict(np) ~ MAPE, data = na.omit(stock), col = "green")
+```
+
+
+The kernel regression seems to resemble the model in problem 2 for small MAPE values and for large MAPE values it is much smaller than the model in problem 2, so they are quatitatively differnt.
+
+
+***
+***
+
+# Problem 6 {.tabset}
+
+## a
+
+```{r, cache=TRUE}
+simulate_simple <- function(v, m, s, df){
+  noise <- rt(length(v), df = df)
+  return  <- (1/v) + s * noise + m
+  df <- data.frame(MAPE = v,
+                   Return_10_fwd = return)
+  return (df)
+}
+
+m <- t.est$estimate[1]
+s <- t.est$estimate[2]
+df <- t.est$estimate[3]
+v <- na.omit(stock$MAPE)
+result <- simulate_simple(v,m,s,df)
+summary(result)
+nrow((result))
+```
+
+According to the summary statistics, the two columns are what they should be since thay are not significantly different.
+
+## b
+```{r, cache = TRUE}
+get_coeff <- function(df){
+  md <- lm(Return_10_fwd ~ I(1/MAPE), data = df)
+  return (summary(md)$coefficient[,1][2])
+}
+
+get_coeff(stock)
+mean(replicate(100,get_coeff(simulate_simple(v,m,s,df))))
+```
+
+It works by running it on the original data, it alos works on the simulated data and we get an average coefficient around 1.005.
+
+
+## c
+
+```{r,cache=TRUE}
+get_dist <- function(){
+  # simulated error
+  dist <- abs(get_coeff(simulate_simple(v,m,s,df)) - 1.0)
+  # true error
+  true_dist <- abs(get_coeff(stock) - 1.0)
+  return (dist >= true_dist)
+}
+
+l <- replicate(1000, get_dist())
+prob <- length(which(l == TRUE))/length(l)
+```
+The probability,underthesimple-minded model, of the coefficient on 1/MAPE being as far from 1.0 as what found in the data is 0.923
+
+## d
+
+
+H0 : the coefficient of the predictor is 1.0
+
+Ha: the coefficient of the predictor is not 1.0
+
+From part (c) we know that the p value is 0.923 which is greater than $\alpha = 0.05$ for a 90% confidence interval, so we do not have enough evidenc to reject the null hypothesis that the coefficient is 1.0.
+
+## e
+```{r,cache=TRUE}
+kernel_reg <- function(df){
+  options(np.messages=FALSE)
+  np <- npreg(Return_10_fwd ~ MAPE, data = df, tol = 0.001, ftol = 0.0001)
+  return (fitted(np))
+}
+
+fit1 <- kernel_reg(stock)
+fit_real <- fitted(np)
+length(which(fit1 == fit_real) == TRUE)
+
+fit2 <- kernel_reg(simulate_simple(v,m,s,df))
+```
+
+Since all the fitted value matches the fitted value from problem 4, so it works on the original data. And all the value from the simulated data seem to be reasonable as well.
+
+## f
+```{r, cache=TRUE}
+plot(1/MAPE ~ MAPE, data = stock, xlab = "MAPE", ylab = "Return", main = "Predict Return vs. MAPE")
+
+add_kernal <- function(){
+  data <- simulate_simple(v,m,s,df)
+  fit <-  kernel_reg(data)
+  lines(x =  data$MAPE, y = fit, col = "blue")
+}
+
+plots <- replicate(200, add_kernal())
+points(1/MAPE ~ MAPE, data = stock)
+
+lines(predict(np) ~ MAPE, data = (stock), col = "green")
+```
+
+
+Since the blue curves(simulated) are mostly below the black curve(predicted by simple minded), we conclude that the simple minded model's estimation of the returns are a little too high, so it is not plausible.
+
+
+***
+***
+
+
+# Problem 7 {.tabset}
+
+## a
+```{r}
+md <- lm(Return_10_fwd ~ MAPE + I(1/MAPE), data = stock)
+summary(md)
+```
+
++ The coefficient for MAPE is -0.0022604 with standard error of 0.0094470
++ The coefficient for 1/MAPE is 0.5910408 with standard error of 0.0661352
++ Both of them are significant, since both of the p-values are very small
+
+## b
+```{r}
+md <- lm(Return_10_fwd ~ MAPE + I(1/MAPE) + I(MAPE^2), data = stock)
+summary(md)
+```
+
++ The coefficient for MAPE is -0.000219 with standard error of 0.00156
++ The coefficient for 1/MAPE is 0.7356 with standard error of 0.1268
++ The coefficient for $MAPE^2$ is -0.0000358 with standard error of 0.0000268
++ According to the p-values, 1/MAPME is significant while MAPE and $MAPE^2$ are not significant
+
+## c
+
+This is happening because the simple mided model over estimate the returns, so in part (a) the term MAPE compensate for this effect by havinga negative coefficient so that the prediction will be lower and both predictors are significant. However, in Part (b), both MAPE and $MAPE^2$ have the same negative effect on the model so their individual effect is smaller, thus theri p-values indicate that individually they are not significant.
+
+
+
+
+
+
+
+
+
+
+
+
