@@ -1,0 +1,527 @@
+---
+title: "Angela Liang HW 2"
+output:
+  html_document: 
+    toc:  true
+    toc_float:  true
+    code_folding:  hide
+---
+***
+***
+# Problem 1
+```{r}
+library(data.table)
+uval <- read.csv("uval.csv")
+model1 <- lm(growth ~ 0 + underval + log(gdp), data = uval)
+summary(model1)
+```
++ The coeeficient for `underval` is 0.0040172, with standard error of 0.0021971
++ The coeeficient for `log(gdp)` is 0.0021447, with standard error of 0.0001067
++ It does not support the idea of "catching up", since coefficient of `log(gdp)` is positive, country with higher gdp will have higher economy growth.
++ They support the idea that under-valuing a currency boosts economic growth, since coefficient of underval is positive, more under-valued currency will have higher economy growth.
+
+***
+***
+# Problem 2 {.tabset}
+
+## a
+```{r}
+model2 <- lm(growth ~ 0 + underval + log(gdp) + factor(year) + country, data = uval)
+summary(model2)
+```
++ The coefficient for `underval` is 0.0136094, with standard error of 0.0028977
++ The coefficient for `log(gdp)` is 0.0289246, with standard error of 0.0031672
+
+## b
+
++ Since the year is in five-year increments so it is not continuous and we are treating year as a categorical variable.
++ Differnt year has differnt level of effect on the model so we wont to factor `year`
+
+##c
+```{r}
+library(ggplot2)
+df <- data.frame(year = sort(unique(uval$year)),
+                 coefficients = coef(model2)[3:12])
+
+ggplot(df, aes(x = year, y = coefficients)) +
+  geom_point() +
+  xlab("Time") +
+  ylab("Coefficients") +
+  ggtitle("Coefficients on Year versus Time") +
+  theme(plot.title = element_text(hjust = 0.5))
+```
+
+## d
+
++ It does not support the idea of "catching up", since coefficient of `log(gdp)` is positive, country with higher gdp will have higher economy growth.
++ They support the idea that under-valuing a currency boosts economic growth, since coefficient of underval is positive, more under-valued currency will have higher economy growth.
+
+# Problem 3 {.tabset}
+
+## a
+
++ $R^2$ for the first model is 0.2383, adjusted $R^2$ for the first model is 0.2371
++ $R^2$ for the second model is 0.5527, adjusted $R^2$ for the second model is 0.4762
+
+## b
+```{r,cache = T}
+
+cv.lm <- function(data, formulae, nfolds=5) {
+  # Strip data of NA rows
+    # ATTN: Better to check whether NAs are in variables used by the models
+  data <- na.omit(data)
+  # Make sure the formulae have type "formula"
+  formulae <- sapply(formulae, as.formula)
+  # Extract the name of the response variable from each formula
+    # ATTN: CV doesn't make a lot of sense unless these are all the same!
+  responses <- sapply(formulae, response.name)
+  names(responses) <- as.character(formulae)
+  n <- nrow(data)
+  # Assign each data point to a fold, at random
+    # see ?sample for the effect of sample(x) on a vector x
+  fold.labels <- sample(rep(1:nfolds, length.out=n))
+  mses <- matrix(NA, nrow=nfolds, ncol=length(formulae))
+  colnames <- as.character(formulae)
+  # EXERCISE: Replace the double for() loop below by defining a new
+  # function and then calling outer()
+  for (fold in 1:nfolds) {
+    test.rows <- which(fold.labels == fold)
+    train <- data[-test.rows,]
+    test <- data[test.rows,]
+    for (form in 1:length(formulae)) {
+       # Fit the model on the training data
+       current.model <- lm(formula=formulae[[form]], data=train)
+       # Generate predictions on the testing data
+       predictions <- predict(current.model, newdata=test)
+       # Get the responses on the testing data
+       test.responses <- test[,responses[form]]
+       test.errors <- test.responses - predictions
+       mses[fold, form] <- mean(test.errors^2)
+    }
+  }
+  return(colMeans(mses))
+}
+
+# Extract the name of the response variable from a regression formula
+  # Presumes response is the left-most variable
+  # EXERCISE: Write a more robust version using terms()
+  # Inputs: regression formula
+  # Outputs: name of the response variable
+response.name <- function(formula) {
+  var.names <- all.vars(formula)
+  return(var.names[1])
+}
+
+
+f <- c("growth ~ underval + log(gdp)","growth ~ 0 + underval + log(gdp) + factor(year) + country")
+mse.q <- cv.lm(uval,f,nfolds = nrow(uval))
+mse.q <- cv.lm(uval,f,nfolds = nrow(uval))
+mse.q
+
+```
+
+The MSE for the first model is 0.0010303489 and MSE for the second model is 0.0009527669, the second model is better because it's MSE is lower than the first one by 7.7582e-05.
+
+## c
+
+It is hard because we have 1301 data points so 5-fold cv will give us 260 data points per fold. And we have more than 100 countries in the data set and there are less than 10 data points per country. This means it is very possible that there are data points in the testing fold that have not appeared in the training folds. So we are not able to test the model on our testing set. As a result, we can not use 5-fold cv on our data set.
+
+# Problem 4 {.tabset}
+
+## a
+```{r, message = FALSE, cache = TRUE}
+library(np)
+np1 <- npreg(growth ~ 0 + underval + log(gdp) + factor(year) + country, data = uval, tol = 0.001, ftol = 0.0001)
+summary(np1)
+
+#np2 <- npreg(growth ~ 0 + underval + log(gdp) + factor(year) + factor(country), data = uval, tol = 0.001, ftol = 0.0001)
+```
+
+We don't have coefficients for kernal regression because in kernel regression we only use banwidth to assign weight to data points instead of coefficients in linear regression.
+
+
+## b
+
+```{r, cache=TRUE}
+kr <- predict(np1,newdata=data.frame(gdp = uval$gdp,
+                               country = uval$country,
+                               year = uval$year,
+                               underval = uval$underval))
+lr <- predict(model2,newdata=data.frame(gdp = uval$gdp,
+                               country = uval$country,
+                               year = uval$year,
+                               underval = uval$underval))
+df <- data.frame(kr = kr,
+                 lr = lr)
+
+ggplot(df, aes(x = lr, y = kr)) +
+  geom_point() +
+  xlab("Linear Model Prediction") +
+  ylab("Kernel Regression Prediction") +
+  ggtitle("Kernel Regression Prediction\nvs\nLinear Model Prediction") +
+  theme(plot.title = element_text(hjust = 0.5))
+```
+
+
+## c
+```{r, cache=TRUE}
+df <- data.frame(kr = kr,
+                 resid = residuals(np1))
+
+ggplot(df, aes(x = kr, y = resid)) +
+  geom_point() +
+  xlab("Kernel Regression Prediction") +
+  ylab("Residuals") +
+  ggtitle("Residuals vs. Prediction") +
+  theme(plot.title = element_text(hjust = 0.5))
+```
+
+These points should be scattered around a flat line if the model is correct but they are not. If the model is good, then we expect the residuals to be uncorralated and independent with mean 0 and constant variance.
+
+## d
+```{r}
+np1$MSE
+```
+
+It is in-sample root MSE. According to the MSE for the two models, the kernel regression model is better since it has lower MSE.
+
+# Problem 5 {.tabset}
+
+## a
+```{r, cache=TRUE}
+kr <- predict(np1,newdata=data.frame(gdp = 10000,
+                               country = "TUR",
+                               year = uval$year,
+                               underval = 0))
+df <- data.frame(year = uval$year,
+                 kr = kr)
+
+ggplot(df, aes(x = factor(year), y = kr)) +
+  geom_point() +
+  xlab("Year") +
+  ylab("Prediction") +
+  ggtitle("Prediction vs. Year for Turkey\n gdp 10000 underval 0") +
+  theme(plot.title = element_text(hjust = 0.5))
+```
+
+
+## b
+```{r, cache=TRUE}
+kr <- predict(np1,newdata=data.frame(gdp = 10000,
+                               country = "TUR",
+                               year = uval$year,
+                               underval = 0.5))
+df <- data.frame(year = uval$year,
+                 kr = kr)
+
+ggplot(df, aes(x = factor(year), y = kr)) +
+  geom_point() +
+  xlab("Year") +
+  ylab("Prediction") +
+  ggtitle("Prediction vs. Year for Turkey\n gdp 10000 underval 0.5") +
+  theme(plot.title = element_text(hjust = 0.5))
+```
+
+
+
+## c
+```{r, cache=TRUE}
+kr <- predict(np1,newdata=data.frame(gdp = 1000,
+                               country = "TUR",
+                               year = uval$year,
+                               underval = 0))
+df <- data.frame(year = uval$year,
+                 kr = kr)
+
+ggplot(df, aes(x = factor(year), y = kr)) +
+  geom_point() +
+  xlab("Year") +
+  ylab("Prediction") +
+  ggtitle("Prediction vs. Year for Turkey\n gdp 1000 underval 0") +
+  theme(plot.title = element_text(hjust = 0.5))
+```
+
+
+## d
+```{r, cache=TRUE}
+kr <- predict(np1,newdata=data.frame(gdp = 1000,
+                               country = "TUR",
+                               year = uval$year,
+                               underval = 0.5))
+df <- data.frame(year = uval$year,
+                 kr = kr)
+
+ggplot(df, aes(x = factor(year), y = kr)) +
+  geom_point() +
+  xlab("Year") +
+  ylab("Prediction") +
+  ggtitle("Prediction vs. Year for Turkey\n gdp 1000 underval 0.5") +
+  theme(plot.title = element_text(hjust = 0.5))
+```
+
+
+## e
+
+There is no clear evidence of an interaction between initial GDP and under valuation. 
+For example when we hold `gdp` at 10,000 and change `underval` from 0 to 0.5, the change in growth is similar as we hold `gdp` at 1,000 and change `underval` from 0 to 0.5. So even there might be small interaction in the model, it is not significant.
+
+## f
+
+```{r, cache = TRUE}
+plot(np1)
+```
+
++ There is no evidence that under-valuation or gdp is strongly related with growth, because the plot is almost a flat straight line.
++ There strong relationship bbetween year and growth and country and growth. Since the there is large flactuation between each year and each country. 
+
+# Problem 6
+
+$$\mathbf{E}[(Y_i - \hat{\mu}(x_i))^2]\\
+= Var[Y_i - \hat{\mu}(x_i)] + (\mathbf{E}[Y_i -\hat{\mu}(x_i)])^2\\
+= Var[Y_i] + Var[\hat{\mu}(x_i)] + 2Cov[Y_i,\hat{\mu}(x_i)] + (\mathbf{E}[Y_i] - \mathbf{E}[\hat{\mu}(x_i)])^2 *\\$$
+
+$$\mathbf{E}[(Y^`_i - \hat{\mu}(x_i))^2]\\
+= Var[Y^`_i - \hat{\mu}(x_i)] + (\mathbf{E}[Y^`_i -\hat{\mu}(x_i)])^2\\
+= Var[Y^`_i] + Var[\hat{\mu}(x_i)] + 2Cov[Y^`_i,\hat{\mu}(x_i)] + (\mathbf{E}[Y^`_i] - \mathbf{E}[\hat{\mu}(x_i)])^2\\
+$$
+We know that :
+$$\mathbf{E}[Y^`_i] = \mathbf{E}[Y_i]\\
+Var[Y^`_i] = Var[Y_i]\\
+Cov[Y^`_i,\hat{\mu}(x_i)] = 0
+$$
+So,
+$$\mathbf{E}[(Y^`_i - \hat{\mu}(x_i))^2]\\
+= Var[Y_i] + Var[\hat{\mu}(x_i)] + (\mathbf{E}[Y_i] - \mathbf{E}[\hat{\mu}(x_i)])^2\\
+= \mathbf{E}[(Y_i - \hat{\mu}(x_i))^2] + 2Cov[Y_i,\hat{\mu}(x_i)] \text{ (from * in previous steps)}
+$$
+
+Thus,
+
+$$\mathbf{E}[(Y^`_i - \hat{\mu}(x_i))^2] - \mathbf{E}[(Y_i - \hat{\mu}(x_i))^2]\\
+= 2Cov[Y_i,\hat{\mu}(x_i)]\\
+\mathbf{E}[\frac{1}{n}\sum_{i=1}^n(Y^`_i - \hat{\mu}(x_i))^2] - \mathbf{E}[\frac{1}{n}\sum_{i=1}^n(Y_i - \hat{\mu}(x_i))^2]\\
+= \frac{1}{n}\sum_{i=1}^n (\mathbf{E}[(Y^`_i - \hat{\mu}(x_i))^2] - \mathbf{E}[(Y_i - \hat{\mu}(x_i))^2])\\
+= \frac{1}{n}\sum_{i=1}^n 2Cov[Y_i,\hat{\mu}(x_i)]\\
+= \frac{2}{n} \sigma^2df(\hat{\mu})\\
+= \frac{2}{n} \sigma^2(p + 1)
+$$
+
+
+
+# Problem 7 {.tabset}
+
+
+## a
+```{r, cache = TRUE, message=FALSE, warning=FALSE}
+l <- c()
+for (i in 1:100){
+  arr <- data.frame(array(rnorm(1000*101, 0, 1), c(1000,101)))
+  md <- lm(X1 ~ X2 + X51, data = arr)
+  md2 <- summary(md)
+  f <- md2$fstatistic
+  p <- pf(f[1],f[2],f[3],lower.tail=F)
+  attributes(p) <- NULL
+  l[i] <- p
+}
+l <- data.frame(l)
+ggplot(l, aes(x =l)) +
+  geom_histogram(bins = 10,color = "black") +
+  xlab("P-value") +
+  ylab("Frequency") +
+  ggtitle("Histogram of p-value") +
+  theme(plot.title = element_text(hjust = 0.5))
+
+
+
+```
+
+It is pretty uniform with some local peaks. The histogram should be uniform because our data is randomly generated from Gaussian distribution.
+
+## b
+```{r, cache = TRUE, message=FALSE, warning=FALSE}
+
+l <- c()
+for (i in 1:100){
+  arr <- data.frame(array(rnorm(1000*101, 0, 1), c(1000,101)))
+  md <- lm(X1 ~ 1, data = arr)
+  full <- lm(X1 ~ ., data = arr)
+  md2 <-step(md,direction = "forward", scope=list(lower=md, upper=full))
+  mds <- summary(md2)
+  f <- mds$fstatistic
+  p <- pf(f[1],f[2],f[3],lower.tail=F)
+  attributes(p) <- NULL
+  l[i] <- p
+}
+l <- data.frame(l)
+ggplot(l, aes(x =l)) +
+  geom_histogram(bins = 10,color = "black") +
+  xlab("P-value") +
+  ylab("Frequency") +
+  ggtitle("Histogram of p-value") +
+  theme(plot.title = element_text(hjust = 0.5))
+```
+
+The plot is right skewed with most value close to 0. Since we used step function to find the optimum model the the p-values are very small indicating that our model is significant.
+
+## c
+```{r, message=FALSE, cache=FALSE}
+arr <- data.frame(array(rnorm(1000*101, 0, 1), c(1000,101)))
+md <- lm(X1 ~ 1, data = arr)
+full <- lm(X1 ~ ., data = arr)
+md2 <-step(md,direction = "forward", scope=list(lower=md, upper=full))
+l <- c()
+for (i in 1:100){
+  arr <- data.frame(array(rnorm(1000*101, 0, 1), c(1000,101)))
+  md <- lm(md2, data = arr)
+  md3 <- summary(md)
+  f <- md3$fstatistic
+  p <- pf(f[1],f[2],f[3],lower.tail=F)
+  attributes(p) <- NULL
+  l[i] <- p
+}
+l <- data.frame(l)
+ggplot(l, aes(x =l)) +
+  geom_histogram(bins = 10,color = "black") +
+  xlab("P-value") +
+  ylab("Frequency") +
+  ggtitle("Histogram of p-value") +
+  theme(plot.title = element_text(hjust = 0.5))
+```
+
+
+# Problem 8
+
+$$\frac{\hat{h_{cv}} - h_{opt}}{h_{opt}} - 1 = O(n^\frac{-1}{10}) \text{ from 4.21}\\
+\hat{h_{cv}} - h_{opt} = h_{opt}(O(n^\frac{-1}{10}) + 1)\\
+\hat{h_{cv}} = h_{opt}(O(n^\frac{-1}{10}) + 1) + h_{opt}\\
+\hat{h_{cv}} = h_{opt}O(n^\frac{-1}{10}) + 2h_{opt}\\
+\hat{h_{cv}} = O(n^\frac{-1}{5})O(n^\frac{-1}{10}) + 2 O(n^\frac{-1}{5}) \text{ from 4.17}\\
+\hat{h_{cv}} = O(n^\frac{-3}{10}) + O(n^\frac{-1}{5}) = O(n^\frac{-1}{5})\\
+$$
+
+$$MSE(\hat{h_{cv}}) - \sigma^2 = O(\hat{h_{cv}}^4) + O((1/nh)^{-1}) \text{ from 4.16}\\
+= O((n^\frac{-1}{5})^4) + O((1/n(n^\frac{-1}{5}))^{-1})\\
+= 2O(n^\frac{-4}{5})\\
+= O(n^\frac{-4}{5})
+$$
+
+# Problem 9 {.tabset}
+
+## a
+```{r, cache=TRUE, message=FALSE}
+### Starter code for Homework 2, last problem ###
+
+# Our true mean function: will be sin(x/2) on [0,4*pi] and sin(6*x) on [4*pi,8*pi]
+# Input: a vector of real numbers (x)
+# Output: the vector of function values at x
+mu = function(x){
+  # Initialize a vector of zeros
+  y = numeric(length(x))
+  # Figure out which points are to the left or right of 4*pi
+  left_points = (x<=4*pi)
+  right_points = (x>4*pi)
+  # Assign the appropriate sine values
+  y[left_points] = sin(x[left_points]/2)
+  y[right_points] = sin(6*x[right_points])
+  # Return y
+  y
+}
+
+# A function to draw a sample from this curve
+# Input: number of samples to draw (n)
+# Output: data frame with columns named "x" and "y"
+generate_sample = function(n){
+  # Sample the x coordinates uniformly on [0,8*pi].
+  # We sort the x here to make plotting easier later.
+  x = sort(runif(n,0,6*pi))
+  # Sample the y coordinates as Gaussians around mu(x)
+  y = mu(x) + rnorm(n,0,.2) # standard deviation of the noise is hard coded
+  # Bind this all together into a data frame
+  data.frame(x=x,y=y)
+}
+
+# We set the seed so that your homeworks will match
+set.seed(9781)
+# Sample 300 points.  This is your data set!
+data = generate_sample(300)
+
+plot(x = data$x, y = data$y)
+curve(mu,0,8*pi, add = TRUE)
+
+
+
+```
+
+
+For x < 4$\pi$ the curve fit the data very well but when x > 4$\pi$ there are larger error.
+
+## b
+```{r, cache = TRUE}
+data1 <- data[which(data$x < 4*pi),]
+data2 <- data[which(data$x > 4*pi),]
+
+np1 <- npreg(y ~ 0 + x, data = data1, tol = 0.001, ftol = 0.0001)
+np2 <- npreg(y ~ 0 + x, data = data2, tol = 0.001, ftol = 0.0001)
+np <- npreg(y ~ 0 + x, data = data, tol = 0.001, ftol = 0.0001)
+
+summary(np1)
+summary(np2)
+summary(np)
+```
+
++ For x < 4$\pi$ the bandwidth is 0.3182388
++ For x > 4$\pi$ the bandwidth is 0.06669089
++ Overall, the bandwidth is 0.07970102
++ I notice that, when x is less than 4$\pi$ the bandwith is large and when x is larger than 4$\pi$ the bandwidth is small, and for the overall regression, the bandwidth is in between.
+
+## c
+```{r, cache = TRUE, fig.width=7, fig.height=9}
+data$trueV <- mu(data$x)
+data$np1 <- predict(np1,newdata=data.frame(
+                               x = data$x))
+data$np2 <- predict(np2,newdata=data.frame(
+                               x = data$x))
+data$np <- predict(np,newdata=data.frame(
+                               x = data$x))
+ggplot(data) +
+  geom_point(aes(x = x, y = y)) +
+  geom_point(aes(x = x, y = np1), color = "blue") +
+  geom_point(aes(x = x, y = trueV), color = "red") +
+  xlab("x") +
+  ylab("y") +
+  ggtitle("bandwidth 0.3182388") +
+  theme(plot.title = element_text(hjust = 0.5))
+
+ggplot(data) +
+  geom_point(aes(x = x, y = y)) +
+  geom_point(aes(x = x, y = np2), color = "blue") +
+  geom_point(aes(x = x, y = trueV), color = "red") +
+  xlab("x") +
+  ylab("y") +
+  ggtitle("bandwidth 0.06669089") +
+  theme(plot.title = element_text(hjust = 0.5))
+
+ggplot(data) +
+  geom_point(aes(x = x, y = y)) +
+  geom_point(aes(x = x, y = np), color = "blue") +
+  geom_point(aes(x = x, y = trueV), color = "red") +
+  xlab("x") +
+  ylab("y") +
+  ggtitle("bandwidth 0.07970102") +
+  theme(plot.title = element_text(hjust = 0.5))
+```
+
+red is the true mean; black is data point; blue is kernel regression predictions.
+
+## d
+
++ For bandwidth 0.3182388 trained on the left side, it predicts very well on the left half, it's very close to the true mean. However, for the right half it's almost a straight line and it makes really bad predictions because the bandwidth is too large for the right side since it's too smooth.
++ For bandwidth 0.06669089 trained on the right side, it predicts badly on the left half, but did pretty well on the right half.
++ For bandwidth 0.07970102 trained on overall data set, it does not do as well as the bandwidths trained and test on each of their half, but it does better than the bandwidths trained on one half and tested on the other half. Overall the bandwidth trained on the overall data set did pretty good in gerneral.
++ From this problem we learned that when we are doing kernel regression we have to train the model on overall data set if we want better overall result. Larger bandwidth will result in smoother prediction and smaller bandwidth is better for data with less variance.
+
+
+collaborated with: Zihan Guo
+
+
+

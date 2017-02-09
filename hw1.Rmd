@@ -1,0 +1,394 @@
+---
+title: "Angela Liang HW 1"
+output:
+  html_document: 
+    toc:  true
+    toc_float:  true
+    code_folding:  hide
+---
+***
+***
+# Problem 1
+```{r,warning = FALSE, message = FALSE}
+library(data.table)
+library(ggplot2)
+RAJ <- fread("RAJ.csv")
+RAJ$M <- 1
+RAJ$M[which(RAJ$year < 1500)] <- 0
+
+head(RAJ)
+```
+
+The first few rows show that Mt has been correctly calculated.
+
+***
+***
+
+# Problem 2 {.tabset}
+## a)
+```{r}
+model <- lm(urbanization ~ 0 + factor(country) + factor(year) + M:westernEurope:factor(year) + atlTrade : coastToArea + initialConstr : M : factor(year) + atlTrade : coastToArea : initialConstr, data = RAJ)
+```
+`model <- lm(urbanization ~ 0 + factor(country) + factor(year) + M:westernEurope:factor(year) + atlTrade :
+coastToArea + initialConstr : M : factor(year) + atlTrade : coastToArea : initialConstr, data = RAJ)`
+
++ In my model, `urbanization` is the response variable
++ 0 is for removing the intercept
++ `factor(country)` is country
++ `factor(year)` is year
++ `M:westernEurope:factor(year)` is the interaction between W and M and by taking into account year, we will have different level of $\alpha$
++ `atlTrade : coastToArea` corresponds to A P
++ `initialConstr : M : factor(year)` is interaction between M and C, and by taking into account year, we will have different level of $\gamma$
++ `atlTrade : coastToArea : initialConstr` is the interaction between A P C
+
+## b)
+```{r}
+summary(model)
+round(confint(model, level = 0.95),3)
+```
+
+## c) 
+The NA are in the model coefficient because we `M` is created from `year`, and the two variables are not linearly independent because for year to be 1300 or 1400, `M` can't be 1. So there are NAs in our model. 
+
+##d) 
+We assume that the data is normally independently normally distributed, and we assume that we have a linear model. We also assume the error is normally independently distributed with mean 0 and constant variance.
+
+##e)
+For one unit increase in A, we expect on average $\eta$PC + $\beta$P increase in u; For one unit increase in P, we expect on average $\beta$A + $\eta$AC in crease in u; for one unit increase in C we expect on average $\gamma$M + $\eta$AP increase in u. 
+
+***
+***
+
+# Problem 3 {.tabset}
+## a)
+```{r}
+#round(confint(model, level = 0.975),3)
+P <- median(RAJ$coastToArea)
+
+gamma <- c(0,0,0.0011693, -0.0087137, 0.0037330, -0.0092484, -0.0131528, -0.0109241)
+gammamax <- c(0, 0, 0.030, 0.021,0.033, 0.021, 0.017, 0.020)
+gammamin <- c(0,0, -0.028, -0.038, -0.026, -0.039, -0.043, -0.042)
+
+eta <- c(-0.141, 1.167)
+A <- head(RAJ$atlTrade,8)
+M <- head(RAJ$M,8)
+
+dif1 <- gammamax * M + eta[2] * A * P
+dif2 <- gammamin * M + eta[1] * A * P
+diff <- gamma * M + 0.5132219 * A * P
+
+
+df <- data.frame(lower = dif2,
+                 upper = dif1,
+                 estimate = diff,
+                 year = unique(RAJ$year)
+)
+library(ggplot2)
+
+ggplot(df, aes(x = (year), y = estimate)) + 
+  geom_errorbar(aes(ymin = lower, ymax = upper)) + 
+  geom_point() +
+  labs(y = "Difference in Urbanization Score", x = "Year") +
+  ggtitle("95% Confidence Interval for two country's difference") +
+  theme(plot.title = element_text(hjust = 0.5))
+```
+
+## b)
+```{r}
+P <- quantile(RAJ$coastToArea, 0.25) # P = 0
+
+dif1 <- gammamax * M + eta[2] * A * P
+dif2 <- gammamin * M + eta[1] * A * P
+diff <- gamma * M + 0.5132219 * A * P
+
+
+df <- data.frame(lower = dif2,
+                 upper = dif1,
+                 estimate = diff,
+                 year = unique(RAJ$year)
+)
+
+ggplot(df, aes(x = (year), y = estimate)) + 
+  geom_errorbar(aes(ymin = lower, ymax = upper)) + 
+  geom_point() +
+  labs(y = "Difference in Urbanization Score", x = "Year") +
+  ggtitle("95% Confidence Interval for two country's difference") +
+  theme(plot.title = element_text(hjust = 0.5))
+```
+
+
+## c)
+```{r}
+P <- quantile(RAJ$coastToArea, 0.75)
+
+dif1 <- gammamax * M + eta[2] * A * P
+dif2 <- gammamin * M + eta[1] * A * P
+diff <- gamma * M + 0.5132219 * A * P
+
+
+df <- data.frame(lower = dif2,
+                 upper = dif1,
+                 estimate = diff,
+                 year = unique(RAJ$year)
+)
+library(ggplot2)
+
+ggplot(df, aes(x = (year), y = estimate)) + 
+  geom_errorbar(aes(ymin = lower, ymax = upper)) + 
+  geom_point() +
+  labs(y = "Difference in Urbanization Score", x = "Year") +
+  ggtitle("95% Confidence Interval for two country's difference") +
+  theme(plot.title = element_text(hjust = 0.5))
+```
+
+
+## d)
+Not necessarily, because the intervals for the difference include negative values so higher institution score might lead to lower urbanization level. It does not seem that the institution score contributes more as time goes on. The answer depend on the level of potiential for Atlantic trade, with higher potential, higher institution score is better, but with less than median scores, higher institution score is not necessarily good. And the uncertainty is very high since the interval still contains 0.
+
+***
+***
+
+# Problem 4
+```{r}
+RAJ <- subset(RAJ, !is.na(urbanization))
+RAJ <- subset(RAJ, !is.na(initialConstr))
+
+df <- data.frame(fitted = fitted(model),
+       predicted = (RAJ$urbanization)
+       )
+ggplot(df, aes(x = fitted, y = predicted)) +
+  geom_point() +
+  geom_smooth(method = "lm", se = FALSE) +
+  labs(x = "Actual Values", y = "Predicted Values") +
+  ggtitle("Predicted Urbanization Value \n against Actual Values") +
+  theme(plot.title = element_text(hjust = 0.5))
+```
+
+
+There does not seem to be any problem wih the model, sence their relationship is linear with slope approximately equals to 1.
+
+***
+***
+
+# Problem 5
+```{r}
+library(gridExtra)
+library(broom)
+md <- augment(model)
+p1 <- ggplot(md, aes(atlTrade, .resid)) +
+  geom_point() +
+  geom_hline(yintercept=0, col="red", linetype="dashed") +
+  xlab("Atlantic Trade") + ylab("Residuals") +
+  ggtitle("Residual vs \n atlTrade") +
+  theme(plot.title = element_text(hjust = 0.5))
+
+p2 <- ggplot(md, aes(coastToArea, .resid)) +
+  geom_point() +
+  geom_hline(yintercept=0, col="red", linetype="dashed") +
+  xlab("coastToArea")+ylab("Residuals") +
+  ggtitle("Residual vs \ncoastToArea") +
+  theme(plot.title = element_text(hjust = 0.5))
+
+p3 <- ggplot(md, aes(initialConstr, .resid)) +
+  geom_point() +
+  geom_hline(yintercept=0, col="red", linetype="dashed") +
+  xlab("initialConstr")+ylab("Residuals") +
+  ggtitle("Residual vs \ninitialConstr") +
+  theme(plot.title = element_text(hjust = 0.5))
+
+p4 <- ggplot(md, aes(atlTrade, .resid^2)) +
+  geom_point() +
+  geom_hline(yintercept=0, col="red", linetype="dashed") +
+  xlab("atlTrade") + ylab("Residuals") +
+  ggtitle("Residual sq vs \natlTrade") +
+  theme(plot.title = element_text(hjust = 0.5))
+p5 <- ggplot(md, aes(coastToArea, .resid^2)) +
+  geom_point() +
+  geom_hline(yintercept=0, col="red", linetype="dashed") +
+  xlab("coastToArea")+ylab("Residuals") +
+  ggtitle("Residual sq vs \ncoastToArea") +
+  theme(plot.title = element_text(hjust = 0.5))
+
+p6 <- ggplot(md, aes(initialConstr, .resid^2)) +
+  geom_point() +
+  geom_hline(yintercept = 0, col="red", linetype="dashed") +
+  xlab("initialConstr")+ylab("Residuals") +
+  ggtitle("Residual sq vs \ninitialConstr") +
+  theme(plot.title = element_text(hjust = 0.5))
+
+grid.arrange(p1,p2,p3,p4,p5,p6,nrow = 2)
+```
+
+Yes, they are pretty random with zero mean and constant variance.
+
+***
+***
+
+# Problem 6
+```{r}
+ggplot(md, aes(qqnorm(.std.resid)[[1]], .std.resid)) +
+  geom_point() +
+  xlab("Theoretical Quantiles") +
+  ylab("Standardized Residuals") +
+  ggtitle("Normal Q-Q Plot") +
+  geom_smooth(method = "lm", se = FALSE) +
+  theme(plot.title = element_text(hjust = 0.5))
+
+```
+ 
+According to the nomal Q-Q plot, the residuals are very Gaussian. But there is an outlier an the top right.
+ 
+***
+*** 
+
+# Problem 7
+ 
+```{r}
+df <- data.frame(md)
+ggplot(df, aes(x = factor(factor.country.), y = .resid)) + 
+  geom_boxplot() +
+  labs(x = "Country", y = "Residuals") +
+  ggtitle("Box plot of residuals by Country") +
+  theme(plot.title = element_text(hjust = 0.5)) +
+  theme(axis.text.x = element_text(angle = 90, hjust = 1))
+```
+
++ No, not all columns have the same distribution, but they are not significantly different either.
++ They should be similar because if the model is good then the distribution of the residuals should be similar for every country, with 0 mean and constant variance and normal and uncorrelated and independent. 
+
+***
+***
+
+# Problem 8
+```{r}
+ggplot(df, aes(x = factor(factor.country.), y = .hat)) + 
+  geom_boxplot() +
+  labs(x = "Country", y = "Leverage") +
+  ggtitle("Box plot of Leverage by Country") +
+  theme(plot.title = element_text(hjust = 0.5)) +
+  theme(axis.text.x = element_text(angle = 90, hjust = 1))
+```
+
+According to the Leverage plot, it seems that the distribution of leverage for Pland is very high, while other countries are smaller. Over all the distribution of leverage for the majority of the countries are left-skewed except for England and Portugal...
+
+***
+***
+
+# Problem 9
+```{r}
+ggplot(df, aes(x = factor(factor.country.), y = .cooksd)) + 
+  geom_boxplot() +
+  labs(x = "Country", y = "Cook's Distance") +
+  ggtitle("Box plot of Cook's Distance by Country") +
+  theme(plot.title = element_text(hjust = 0.5)) +
+  theme(axis.text.x = element_text(angle = 90, hjust = 1))
+```
+
+According to the plot, Albania, Belgium, England, Hungary, and Netherlands seems to have higher cook's distance. As for other countries, their distribution of cook's distance is close to 0. We dont have to be concerned. 
+
+***
+***
+
+# Problem 10
+```{r}
+new_model <- lm(urbanization ~ 0 + factor(country) + factor(year) + westernEurope:factor(year) + atlTrade : coastToArea + initialConstr : factor(year) + atlTrade : coastToArea : initialConstr, data = RAJ)
+summary(new_model)
+```
+
++ After removing M, there is not much change to our coefficients, but there are 2 NAs in the model. This is because there are multicollinearity due to the interaction terms. For each set of categories we known that the event is going to be in one of them so the coiffencient for the last category is not necessary anymore. And R set it to NA.
++ We need to include the interaction because around 1500, Columbus discovered America and that was the time when Atlantic trade became popular. 
+
+***
+***
+
+# Problem 11
+
+The statistical assumptions of the model seem pretty sound and reliable since we have included necessary interaction and the diagnostic plots seem reasonable. Our rediduals are relatively random, uncorrelated, with mean 0 and constent variance. The normal QQ plot suggest the distribution of the residuals are reasonably normal, and the cook's distace plot sugest that there are no significant outliers. The fitted vs. actual value plots suggest our model makes pretty accurate predictions. Thus, the model is pretty realiable.
+
+***
+***
+
+# Theory 1
+
+For global mean as a linear smoother, the influence matrix is n x n with every element equals to $\frac{1}{n}$, so the trace of the matrix is 1, since the sum of elements on the diagnaol is 1.
+$$\mathbf{w} = \left[\begin{array}
+{rrr}
+\frac{1}{n} & \frac{1}{n} & \frac{1}{n} \\
+\frac{1}{n} & \frac{1}{n} & \frac{1}{n} \\
+\frac{1}{n} & \frac{1}{n} & \frac{1}{n}
+\end{array}\right]
+$$
+By 1.65, we know that df(w) = tr (w) = 1. Thus it has one degree of freedom.
+
+***
+***
+
+# Theory 2
+
+$w_{i,j}$ = $\Bigg\{$ $\frac{1}{k} \text{(if j is k closest element to i)} \\ 0 \text{(otherwise)}$ 
+
+Thus for n x n matrix the sum of the diagnol is n * $\frac{1}{k}$ = $\frac{n}{k}$ Since for a data point it self, it must be it's the k-nearest neighbor so the diagnal must be $\frac{1}{k}$. so df(w) = tr (w) = $\frac{n}{k}$.
+
+***
+***
+
+# Theory 3
+
+$$\mathbf{w} = \left[\begin{array}
+{rrr}
+w_{1,1} & w_{1,2} & w_{1,3} \\
+w_{2,1} & w_{2,2} & w_{2,3} \\
+w_{3,1} & w_{3,2} & w_{3,3}
+\end{array}\right]
+$$
+$$\mathbf{ww^T} = \left[\begin{array}
+{rrr}
+\sum_{j=1}^n w^2_{1,j} & ... & ... \\
+ ... & \sum_{j=1}^n w^2_{2,j} & ... \\
+... & ... & \sum_{j=1}^n w^2_{3,j}
+\end{array}\right]
+$$
+
+$$n^{-1}\sum_{i=1}^n V[\hat{Y_i}]\\
+= n^{-1}\sum_{i=1}^n V[\sum_{j=1}^n w_{ij}Y_j]\\
+= n^{-1}\sum_{i=1}^n V[\hat{\mu(x_i)}]\\
+= n^{-1}\sum_{i=1}^n \sigma^2 \sum_{j=1}^n w^2(x_j, x_i)\\
+= \frac{\sigma^2}{n} \sum_{i=1}^n \sum_{j=1}^n w^2_{ij}\\
+\text{(the sum of the diagnal of wwT is equal to sum of square of every element in w)}\\
+= \frac{\sigma^2}{n} tr\space ww^T \\
+$$
+To prove $\frac{\sigma^2}{n} tr\space ww^T = \frac{\sigma^2}{n}p$
+
+$$w = X(X^TX)^{-1}X^T\\
+w^T = (X(X^TX)^{-1}X^T)^T \\
+= X((X^TX)^{-1})^TX^T\\
+= X(X^TX)^{-1}X^T \\
+= w$$
+$$tr \space ww^T = tr \space ww\\
+= tr \space X(X^TX)^{-1}X^TX(X^TX)^{-1}X^T\\
+= tr \space X^TX(X^TX)^{-1}X^TX(X^TX)^{-1} \\
+= tr \space X^TX(X^TX)^{-1} \\
+= tr \space I_p\\
+= P \\
+\text{Thus} \space \frac{\sigma^2}{n} tr\space ww^T = \frac{\sigma^2}{n}p
+$$
+
+***
+***
+
+# Theory 4
+
+$$\sum_{i=1}^n Cov[Y_i,\hat{Y_i}]/\sigma^2_i\\
+= \sum_{i=1}^n Cov[Y_i,\hat{\mu(x_i)}]/\sigma^2_i\\
+= \sum_{i=1}^n Cov[Y_i,\sum_{j=1}^n w_{ij}Y_j]/\sigma^2_i\\
+= \sum_{i=1}^n \sum_{j=1}^n w_{ij} Cov[Y_i,Y_j]/\sigma^2_i\\
+= \sum_{i=1}^n w_{ii}Var[Y_i]/\sigma^2_i\\
+= \sum_{i=1}^n \sigma^2_iw_{ii}/\sigma^2_i\\
+= \sum_{i=1}^n w_{ii}\\
+= tr \space w\\$$
+
+
+***
+***
+
+collaborated with : Zihan Guo, Siqi Yang
